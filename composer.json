@@ -2,9 +2,16 @@
     "name": "sitesource/laravel-polymorphic-settings",
     "description": "Polymorphic, per-model key-value settings for Laravel with opt-in encryption and transparent caching.",
     "keywords": [
-        "SiteSource",
         "laravel",
-        "laravel-polymorphic-settings"
+        "settings",
+        "laravel-settings",
+        "polymorphic",
+        "model-settings",
+        "eloquent",
+        "configuration",
+        "multi-tenant",
+        "encryption",
+        "preferences"
     ],
     "homepage": "https://github.com/sitesource/laravel-polymorphic-settings",
     "license": "MIT",

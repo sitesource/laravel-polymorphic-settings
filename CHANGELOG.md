@@ -6,6 +6,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.1.1] - 2026-04-22
+
+### Changed
+
+- Packagist keywords broadened for discoverability: added `settings`, `laravel-settings`, `polymorphic`, `model-settings`, `eloquent`, `configuration`, `multi-tenant`, `encryption`, `preferences`. Dropped `SiteSource` and the redundant `laravel-polymorphic-settings` slug. Metadata-only change — no code differences from 0.1.0.
+
 ## [0.1.0] - 2026-04-22
 
 Initial public release.
@@ -23,5 +29,6 @@ Initial public release.
 - `polymorphic-settings:install` Artisan command with Laravel Prompts TUI and `--no-interaction` support for CI.
 - Tested against PHP 8.3 / 8.4 / 8.5 and Laravel 12 / 13 on SQLite, MySQL, and Postgres.
 
-[Unreleased]: https://github.com/sitesource/laravel-polymorphic-settings/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/sitesource/laravel-polymorphic-settings/compare/v0.1.1...HEAD
+[0.1.1]: https://github.com/sitesource/laravel-polymorphic-settings/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/sitesource/laravel-polymorphic-settings/releases/tag/v0.1.0
