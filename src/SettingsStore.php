@@ -2,8 +2,10 @@
 
 namespace SiteSource\PolymorphicSettings;
 
+use Illuminate\Contracts\Cache\Repository as CacheRepository;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Arr;
+use Illuminate\Support\Facades\Cache;
 use SiteSource\PolymorphicSettings\Models\Setting;
 
 class SettingsStore
@@ -22,13 +24,13 @@ class SettingsStore
     {
         [$rootKey, $nestedPath] = $this->splitKey($key);
 
-        $setting = $this->query()->where('key', $rootKey)->first();
+        $resolved = $this->resolveValue($rootKey);
 
-        if ($setting === null) {
+        if ($resolved === null) {
             return $default;
         }
 
-        $value = $setting->value;
+        $value = $resolved['value'];
 
         if ($nestedPath === null) {
             return $value;
@@ -41,24 +43,29 @@ class SettingsStore
         return Arr::get($value, $nestedPath, $default);
     }
 
-    public function put(string $key, mixed $value): self
+    public function put(string $key, mixed $value, bool $encrypted = false): self
     {
+        $storedValue = $encrypted && $value !== null ? encrypt($value) : $value;
+
         $this->query()->updateOrCreate(
             ['key' => $key],
             [
-                'value' => $value,
+                'value' => $storedValue,
+                'encrypted' => $encrypted,
                 'configurable_type' => $this->configurableType,
                 'configurable_id' => $this->configurableId,
             ],
         );
 
+        $this->cacheForget($key);
+
         return $this;
     }
 
-    public function putMany(array $values): self
+    public function putMany(array $values, bool $encrypted = false): self
     {
         foreach ($values as $key => $value) {
-            $this->put($key, $value);
+            $this->put($key, $value, $encrypted);
         }
 
         return $this;
@@ -66,7 +73,13 @@ class SettingsStore
 
     public function forget(string $key): bool
     {
-        return $this->query()->where('key', $key)->delete() > 0;
+        $deleted = $this->query()->where('key', $key)->delete() > 0;
+
+        if ($deleted) {
+            $this->cacheForget($key);
+        }
+
+        return $deleted;
     }
 
     public function has(string $key): bool
@@ -79,20 +92,23 @@ class SettingsStore
         return $this->query()
             ->orderBy('key')
             ->get()
-            ->pluck('value', 'key')
+            ->mapWithKeys(fn (Setting $setting) => [
+                $setting->key => $this->unwrap($setting),
+            ])
             ->all();
     }
 
     public function getMany(array $keys): array
     {
-        $found = $this->query()
+        $rows = $this->query()
             ->whereIn('key', $keys)
             ->get()
-            ->pluck('value', 'key');
+            ->keyBy('key');
 
         $results = [];
         foreach ($keys as $key) {
-            $results[$key] = $found->get($key);
+            $setting = $rows->get($key);
+            $results[$key] = $setting instanceof Setting ? $this->unwrap($setting) : null;
         }
 
         return $results;
@@ -108,10 +124,18 @@ class SettingsStore
 
     public function updateValues(string $key, array $values): self
     {
-        $existing = $this->get($key);
-        $merged = is_array($existing) ? array_merge($existing, $values) : $values;
+        $setting = $this->query()->where('key', $key)->first();
 
-        return $this->put($key, $merged);
+        if ($setting === null) {
+            return $this->put($key, $values);
+        }
+
+        $existingValue = $this->unwrap($setting);
+        $merged = is_array($existingValue)
+            ? array_merge($existingValue, $values)
+            : $values;
+
+        return $this->put($key, $merged, encrypted: $setting->encrypted);
     }
 
     public function string(string $key, ?string $default = null): ?string
@@ -162,11 +186,14 @@ class SettingsStore
      */
     protected function query(): Builder
     {
-        $scopeKey = $this->isGlobal()
+        return Setting::query()->where('scope_key', $this->scopeKey());
+    }
+
+    protected function scopeKey(): string
+    {
+        return $this->isGlobal()
             ? Setting::GLOBAL_SCOPE_KEY
             : $this->configurableType.':'.$this->configurableId;
-
-        return Setting::query()->where('scope_key', $scopeKey);
     }
 
     /**
@@ -181,5 +208,93 @@ class SettingsStore
         }
 
         return [$key, null];
+    }
+
+    protected function unwrap(Setting $setting): mixed
+    {
+        $value = $setting->value;
+
+        if ($setting->encrypted && $value !== null) {
+            return decrypt($value);
+        }
+
+        return $value;
+    }
+
+    /**
+     * @return array{value: mixed}|null
+     */
+    protected function resolveValue(string $rootKey): ?array
+    {
+        if (! $this->cacheEnabled()) {
+            return $this->fetchValue($rootKey);
+        }
+
+        $cacheKey = $this->cacheKey($rootKey);
+        $cached = $this->cacheStore()->get($cacheKey);
+
+        if (is_array($cached) && array_key_exists('value', $cached)) {
+            return $cached;
+        }
+
+        $result = $this->fetchValue($rootKey);
+
+        if ($result !== null) {
+            $ttl = $this->cacheTtl();
+            if ($ttl === null) {
+                $this->cacheStore()->forever($cacheKey, $result);
+            } else {
+                $this->cacheStore()->put($cacheKey, $result, $ttl);
+            }
+        }
+
+        return $result;
+    }
+
+    /**
+     * @return array{value: mixed}|null
+     */
+    protected function fetchValue(string $rootKey): ?array
+    {
+        $setting = $this->query()->where('key', $rootKey)->first();
+
+        if ($setting === null) {
+            return null;
+        }
+
+        return ['value' => $this->unwrap($setting)];
+    }
+
+    protected function cacheForget(string $rootKey): void
+    {
+        if (! $this->cacheEnabled()) {
+            return;
+        }
+
+        $this->cacheStore()->forget($this->cacheKey($rootKey));
+    }
+
+    protected function cacheEnabled(): bool
+    {
+        return (bool) config('polymorphic-settings.cache.enabled', true);
+    }
+
+    protected function cacheStore(): CacheRepository
+    {
+        return Cache::store(config('polymorphic-settings.cache.store'));
+    }
+
+    protected function cacheTtl(): ?int
+    {
+        $ttl = config('polymorphic-settings.cache.ttl');
+
+        return $ttl === null ? null : (int) $ttl;
+    }
+
+    protected function cacheKey(string $rootKey): string
+    {
+        $prefix = (string) config('polymorphic-settings.cache.prefix', 'polymorphic-settings');
+
+        return sprintf('%s:%s:%s', $prefix, $this->scopeKey(), $rootKey);
     }
 }

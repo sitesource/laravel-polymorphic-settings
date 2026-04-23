@@ -29,7 +29,9 @@ class TestCase extends Orchestra
 
     public function getEnvironmentSetUp($app)
     {
+        config()->set('app.key', 'base64:AckfSECXIvnK5r28GVIWUAxmbBSjTsmFqWdR1ymp2ck=');
         config()->set('database.default', 'testing');
+        config()->set('cache.default', 'array');
 
         foreach (File::allFiles(__DIR__.'/../database/migrations') as $migration) {
             (include $migration->getRealPath())->up();
