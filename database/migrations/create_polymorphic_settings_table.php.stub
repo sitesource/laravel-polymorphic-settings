@@ -6,14 +6,36 @@ use Illuminate\Support\Facades\Schema;
 
 return new class extends Migration
 {
-    public function up()
+    public function up(): void
     {
-        Schema::create('polymorphic_settings', function (Blueprint $table) {
-            $table->id();
+        Schema::create(config('polymorphic-settings.table'), function (Blueprint $table) {
+            if (config('polymorphic-settings.key_type') === 'uuid') {
+                $table->uuid('id')->primary();
+            } else {
+                $table->id();
+            }
 
-            // add fields
+            $table->string('key');
+            $table->json('value')->nullable();
+            $table->boolean('encrypted')->default(false);
+
+            // Polymorphic parent — stored as string so int and UUID parent
+            // models can coexist in the same table.
+            $table->string('configurable_id', 36)->nullable();
+            $table->string('configurable_type')->nullable();
+            $table->index(['configurable_type', 'configurable_id']);
 
             $table->timestamps();
+
+            $table->unique(
+                ['key', 'configurable_id', 'configurable_type'],
+                'polymorphic_settings_key_scope_unique'
+            );
         });
+    }
+
+    public function down(): void
+    {
+        Schema::dropIfExists(config('polymorphic-settings.table'));
     }
 };
