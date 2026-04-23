@@ -41,6 +41,7 @@ class TestCase extends Orchestra
             $table->id();
             $table->string('name');
             $table->timestamps();
+            $table->softDeletes();
         });
     }
 }

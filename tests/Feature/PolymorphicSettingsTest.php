@@ -37,11 +37,11 @@ it('for() returns a scoped SettingsStore', function () {
     expect($store->isGlobal())->toBeFalse();
 });
 
-it('for() throws on unsaved models', function () {
+it('for() throws on models without a primary key', function () {
     $team = new TestTeam(['name' => 'Unsaved']);
 
     expect(fn () => (new PolymorphicSettings)->for($team))
-        ->toThrow(InvalidArgumentException::class, 'Cannot bind settings to an unsaved model');
+        ->toThrow(InvalidArgumentException::class, 'without a primary key');
 });
 
 it('for() uses getMorphClass() so morph maps are respected', function () {

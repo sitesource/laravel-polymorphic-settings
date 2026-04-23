@@ -7,6 +7,7 @@ parameters:
         - src
         - config
         - database
+        - tests/Support
     tmpDir: build/phpstan
     ignoreErrors:
         -

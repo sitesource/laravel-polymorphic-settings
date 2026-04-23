@@ -82,6 +82,17 @@ class SettingsStore
         return $deleted;
     }
 
+    public function forgetAll(): int
+    {
+        if ($this->cacheEnabled()) {
+            foreach ($this->query()->pluck('key') as $key) {
+                $this->cacheForget($key);
+            }
+        }
+
+        return $this->query()->delete();
+    }
+
     public function has(string $key): bool
     {
         return $this->query()->where('key', $key)->exists();

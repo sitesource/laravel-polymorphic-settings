@@ -14,9 +14,9 @@ class PolymorphicSettings
 
     public function for(Model $model): SettingsStore
     {
-        if (! $model->exists) {
+        if ($model->getKey() === null) {
             throw new InvalidArgumentException(
-                'Cannot bind settings to an unsaved model. Call save() first, or use a model loaded from the database.'
+                'Cannot bind settings to a model without a primary key. Call save() first, or use a model loaded from the database.'
             );
         }
 
