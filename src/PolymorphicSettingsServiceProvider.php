@@ -2,7 +2,7 @@
 
 namespace SiteSource\PolymorphicSettings;
 
-use SiteSource\PolymorphicSettings\Commands\PolymorphicSettingsCommand;
+use SiteSource\PolymorphicSettings\Commands\InstallCommand;
 use Spatie\LaravelPackageTools\Package;
 use Spatie\LaravelPackageTools\PackageServiceProvider;
 
@@ -14,7 +14,7 @@ class PolymorphicSettingsServiceProvider extends PackageServiceProvider
             ->name('polymorphic-settings')
             ->hasConfigFile()
             ->hasMigration('create_polymorphic_settings_table')
-            ->hasCommand(PolymorphicSettingsCommand::class);
+            ->hasCommand(InstallCommand::class);
     }
 
     public function packageRegistered(): void
