@@ -1,5 +1,6 @@
 <?php
 
+use Illuminate\Database\QueryException;
 use SiteSource\PolymorphicSettings\Models\Setting;
 
 it('can create a global setting', function () {
@@ -63,7 +64,7 @@ it('rejects duplicate keys within the same scope', function () {
     Setting::create(['key' => 'foo', 'value' => 'bar']);
 
     expect(fn () => Setting::create(['key' => 'foo', 'value' => 'baz']))
-        ->toThrow(\Illuminate\Database\QueryException::class);
+        ->toThrow(QueryException::class);
 });
 
 it('rejects duplicate keys within the same polymorphic scope', function () {
@@ -79,7 +80,7 @@ it('rejects duplicate keys within the same polymorphic scope', function () {
         'value' => 'light',
         'configurable_id' => '1',
         'configurable_type' => 'App\Models\Team',
-    ]))->toThrow(\Illuminate\Database\QueryException::class);
+    ]))->toThrow(QueryException::class);
 });
 
 it('accepts nullable value column', function () {
@@ -115,4 +116,36 @@ it('uses int keys by default', function () {
     expect($setting->fresh()->id)
         ->toBeInt()
         ->toBeGreaterThan(0);
+});
+
+it('computes scope_key as "*" for global settings', function () {
+    $setting = Setting::create(['key' => 'foo', 'value' => 'bar']);
+
+    expect($setting->fresh())
+        ->scope_key->toBe('*')
+        ->isGlobal()->toBeTrue();
+});
+
+it('computes scope_key as "{type}:{id}" for scoped settings', function () {
+    $setting = Setting::create([
+        'key' => 'theme',
+        'value' => 'dark',
+        'configurable_id' => '42',
+        'configurable_type' => 'App\Models\Team',
+    ]);
+
+    expect($setting->fresh())
+        ->scope_key->toBe('App\Models\Team:42')
+        ->isGlobal()->toBeFalse();
+});
+
+it('recomputes scope_key when configurable changes', function () {
+    $setting = Setting::create(['key' => 'foo', 'value' => 'bar']);
+    expect($setting->fresh()->scope_key)->toBe('*');
+
+    $setting->configurable_id = '1';
+    $setting->configurable_type = 'App\Models\Team';
+    $setting->save();
+
+    expect($setting->fresh()->scope_key)->toBe('App\Models\Team:1');
 });

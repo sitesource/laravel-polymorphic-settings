@@ -19,18 +19,22 @@ return new class extends Migration
             $table->json('value')->nullable();
             $table->boolean('encrypted')->default(false);
 
-            // Polymorphic parent — stored as string so int and UUID parent
-            // models can coexist in the same table.
+            // Polymorphic parent — nullable for global settings.
+            // String-typed so int-keyed and UUID-keyed parents can coexist.
             $table->string('configurable_id', 36)->nullable();
             $table->string('configurable_type')->nullable();
-            $table->index(['configurable_type', 'configurable_id']);
+
+            // Internal compound scope key: `*` for globals, `{type}:{id}`
+            // for scoped. Exists because SQL treats NULL values as distinct
+            // in UNIQUE constraints, so we cannot rely on a unique index
+            // over nullable configurable_id/configurable_type to prevent
+            // duplicate global keys. Also serves as a prefix-index for
+            // "all settings in this scope" queries.
+            $table->string('scope_key')->default('*');
 
             $table->timestamps();
 
-            $table->unique(
-                ['key', 'configurable_id', 'configurable_type'],
-                'polymorphic_settings_key_scope_unique'
-            );
+            $table->unique(['scope_key', 'key'], 'polymorphic_settings_scope_key_unique');
         });
     }
 

@@ -2,9 +2,9 @@
 
 namespace SiteSource\PolymorphicSettings;
 
+use SiteSource\PolymorphicSettings\Commands\PolymorphicSettingsCommand;
 use Spatie\LaravelPackageTools\Package;
 use Spatie\LaravelPackageTools\PackageServiceProvider;
-use SiteSource\PolymorphicSettings\Commands\PolymorphicSettingsCommand;
 
 class PolymorphicSettingsServiceProvider extends PackageServiceProvider
 {
