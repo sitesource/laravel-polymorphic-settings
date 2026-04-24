@@ -146,6 +146,10 @@ $team->settings()->put('theme', [
 $team->settings()->get('theme.palette.primary.hex');   // '#abc123'
 ```
 
+Dot-notation is a **read-time convenience** for walking into an array value. Keys are always stored literally — `put('commerce.foo', true)` and `get('commerce.foo')` round-trip against a row whose stored key is the string `commerce.foo`. `get()` only falls back to nested-path traversal when no literal match exists, so you can safely use dotted keys as namespaced flat identifiers.
+
+`has()`, `forget()`, and `pull()` are always literal. `has('theme.mode')` asks "is there a row with that exact key", not "can I reach that nested path through the `theme` row".
+
 ### Typed getters
 
 No implicit coercion — if the stored value is the wrong type, the default is returned:

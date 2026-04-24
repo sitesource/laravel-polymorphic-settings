@@ -22,25 +22,37 @@ class SettingsStore
 
     public function get(string $key, mixed $default = null): mixed
     {
-        [$rootKey, $nestedPath] = $this->splitKey($key);
+        // Keys are literal by default — matches put(), has(), forget(),
+        // and the storage row's `key` column. Try a literal lookup first.
+        $resolved = $this->resolveValue($key);
 
-        $resolved = $this->resolveValue($rootKey);
-
-        if ($resolved === null) {
-            return $default;
+        if ($resolved !== null) {
+            return $resolved['value'];
         }
 
-        $value = $resolved['value'];
+        // Fall back to dot-notation traversal only when the key is dotted
+        // and no literal row matched. This preserves the nested-read
+        // ergonomics (`get('theme.mode')` into a stored array) without
+        // silently dropping writes that happen to contain dots.
+        if (str_contains($key, '.')) {
+            [$rootKey, $nestedPath] = $this->splitKey($key);
 
-        if ($nestedPath === null) {
-            return $value;
+            $resolved = $this->resolveValue($rootKey);
+
+            if ($resolved === null) {
+                return $default;
+            }
+
+            $value = $resolved['value'];
+
+            if (! is_array($value)) {
+                return $default;
+            }
+
+            return Arr::get($value, $nestedPath, $default);
         }
 
-        if (! is_array($value)) {
-            return $default;
-        }
-
-        return Arr::get($value, $nestedPath, $default);
+        return $default;
     }
 
     public function put(string $key, mixed $value, bool $encrypted = false): self

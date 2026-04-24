@@ -6,6 +6,21 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.1.2] - 2026-04-24
+
+### Fixed
+
+- **Dot-notation asymmetry in `get()`** ([#kimber-v2 report]). Keys were treated
+  as literal by `put()`, `has()`, `forget()`, and `pull()` but dot-split on
+  `get()`. Writing a key that contained a dot (e.g. `put('commerce.foo', true)`)
+  succeeded silently, and the matching `get('commerce.foo')` always returned
+  the default — `get()` was looking for `foo` inside a `commerce` array that
+  never existed. `get()` now tries a literal match first and only falls back
+  to nested-path traversal when the literal key is absent **and** the key
+  contains a dot. All other methods remain literal-only. This is a strict
+  superset of previous behaviour — existing nested reads (e.g. `get('theme.mode')`
+  against a stored `theme = ['mode' => 'dark']`) still work the same way.
+
 ## [0.1.1] - 2026-04-22
 
 ### Changed
@@ -29,6 +44,7 @@ Initial public release.
 - `polymorphic-settings:install` Artisan command with Laravel Prompts TUI and `--no-interaction` support for CI.
 - Tested against PHP 8.3 / 8.4 / 8.5 and Laravel 12 / 13 on SQLite, MySQL, and Postgres.
 
-[Unreleased]: https://github.com/sitesource/laravel-polymorphic-settings/compare/v0.1.1...HEAD
+[Unreleased]: https://github.com/sitesource/laravel-polymorphic-settings/compare/v0.1.2...HEAD
+[0.1.2]: https://github.com/sitesource/laravel-polymorphic-settings/compare/v0.1.1...v0.1.2
 [0.1.1]: https://github.com/sitesource/laravel-polymorphic-settings/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/sitesource/laravel-polymorphic-settings/releases/tag/v0.1.0
