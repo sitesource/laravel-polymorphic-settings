@@ -162,3 +162,83 @@ describe('encrypted settings with cache', function () {
         expect($second)->toBe(0);
     });
 });
+
+describe('cache hygiene for dotted keys', function () {
+    it('does not cache literal lookups for dotted keys', function () {
+        // Reported by Kimber v2 — caching the literal-row lookup of a
+        // dotted key meant the entry survived a put() on the root,
+        // so a subsequent dotted read served the stale literal forever.
+        $this->store->put('commerce.foo', true);
+        expect($this->store->get('commerce.foo'))->toBeTrue();
+
+        // Simulate an external mutation that the SettingsStore has no
+        // way to know about — e.g. a sibling process or a manual SQL
+        // deletion. The cache must NOT have made the literal lookup
+        // sticky.
+        DB::table('polymorphic_settings')->where('key', 'commerce.foo')->delete();
+
+        expect($this->store->get('commerce.foo'))->toBeNull();
+    });
+
+    it('serves the new nested value after migrating from literal to nested storage', function () {
+        // Same scenario, but with the canonical migration: row deleted,
+        // root key re-put with a nested array. After the fix, the
+        // dotted read should resolve via the (cache-fresh) root, not
+        // the (stale) literal cache entry.
+        $this->store->put('commerce.foo', true);
+        expect($this->store->get('commerce.foo'))->toBeTrue();
+
+        DB::table('polymorphic_settings')->where('key', 'commerce.foo')->delete();
+        $this->store->put('commerce', ['foo' => false]);
+
+        expect($this->store->get('commerce.foo'))->toBeFalse();
+    });
+
+    it('still caches the root for dotted reads (perf)', function () {
+        // Caching is dropped for the literal lookup of a dotted key,
+        // but the root traversal remains cached — repeated dot-notation
+        // reads against the same root should not multiply DB queries.
+        $this->store->put('theme', ['mode' => 'dark', 'accent' => '#f00']);
+
+        // Prime: one query for the literal miss + one for the root.
+        $this->store->get('theme.mode');
+
+        // Subsequent dotted reads against any field of the same root:
+        // one literal-miss query each, but root stays warm.
+        $second = countQueriesWhile(fn () => $this->store->get('theme.mode'));
+        $third = countQueriesWhile(fn () => $this->store->get('theme.accent'));
+
+        expect($second)->toBeLessThanOrEqual(1);
+        expect($third)->toBeLessThanOrEqual(1);
+    });
+});
+
+describe('forget() cache invalidation', function () {
+    it('busts the cache even when the row was already gone', function () {
+        // Reported by Kimber v2 — forget() guarded cacheForget() behind
+        // `if ($deleted)`, so calling it after an external row deletion
+        // left the stale cache entry in place and gave the application
+        // no public API to clean up.
+        $this->store->put('foo', 'bar');
+        $this->store->get('foo'); // primes cache
+        expect(Cache::has('polymorphic-settings:*:foo'))->toBeTrue();
+
+        // External deletion leaves the cache holding 'bar'.
+        DB::table('polymorphic_settings')->where('key', 'foo')->delete();
+        expect(Cache::has('polymorphic-settings:*:foo'))->toBeTrue();
+
+        // forget() returns false because no row was deleted, but the
+        // cache must be invalidated regardless.
+        expect($this->store->forget('foo'))->toBeFalse();
+        expect(Cache::has('polymorphic-settings:*:foo'))->toBeFalse();
+        expect($this->store->get('foo'))->toBeNull();
+    });
+
+    it('returns true and busts the cache when a row was deleted', function () {
+        $this->store->put('foo', 'bar');
+        $this->store->get('foo');
+
+        expect($this->store->forget('foo'))->toBeTrue();
+        expect(Cache::has('polymorphic-settings:*:foo'))->toBeFalse();
+    });
+});

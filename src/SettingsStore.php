@@ -22,19 +22,28 @@ class SettingsStore
 
     public function get(string $key, mixed $default = null): mixed
     {
-        // Keys are literal by default — matches put(), has(), forget(),
-        // and the storage row's `key` column. Try a literal lookup first.
-        $resolved = $this->resolveValue($key);
+        $isDotted = str_contains($key, '.');
+
+        // Try a literal-key lookup first (preserves the v0.1.2 contract
+        // that put('a.b', x) → get('a.b') roundtrips). Skip the cache
+        // layer for dotted keys: cache invalidation runs against the
+        // root key when put('a', ...) is called, but a literal cache
+        // entry under 'a.b' would never be busted by that call. To
+        // avoid silently serving a stale literal after the user has
+        // migrated the same logical setting under a nested root, the
+        // literal path stays uncached for dotted keys. The
+        // root-traversal path below is still cached.
+        $resolved = $isDotted
+            ? $this->fetchValue($key)
+            : $this->resolveValue($key);
 
         if ($resolved !== null) {
             return $resolved['value'];
         }
 
-        // Fall back to dot-notation traversal only when the key is dotted
-        // and no literal row matched. This preserves the nested-read
-        // ergonomics (`get('theme.mode')` into a stored array) without
-        // silently dropping writes that happen to contain dots.
-        if (str_contains($key, '.')) {
+        // Fall back to dot-notation traversal only when the key is
+        // dotted and no literal row matched.
+        if ($isDotted) {
             [$rootKey, $nestedPath] = $this->splitKey($key);
 
             $resolved = $this->resolveValue($rootKey);
@@ -87,9 +96,12 @@ class SettingsStore
     {
         $deleted = $this->query()->where('key', $key)->delete() > 0;
 
-        if ($deleted) {
-            $this->cacheForget($key);
-        }
+        // Bust the cache regardless of whether the row existed in the
+        // database. External mutations (a sibling process, raw SQL,
+        // a previous run that deleted the row outside this store) can
+        // leave a stale cache entry that the application has no other
+        // public API to invalidate.
+        $this->cacheForget($key);
 
         return $deleted;
     }
